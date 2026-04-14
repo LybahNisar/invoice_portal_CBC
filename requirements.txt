@@ -2,4 +2,3 @@ streamlit
 Pillow
 pandas
 python-dotenv
-sqlite3
