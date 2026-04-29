@@ -17,16 +17,19 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 # MUST BE AT TOP to exit before rendering UI
 if st.query_params.get("api") == "sync":
     secret = st.query_params.get("secret")
+    mode = st.query_params.get("mode", "pending") # Default to pending
+    
     if secret == os.environ.get("PORTAL_SECRET", "chocoberry2026"):
         try:
             conn = sqlite3.connect(DB_PATH)
-            # Fetch pending and return as clean JSON
-            df = pd.read_sql("SELECT * FROM portal_uploads WHERE synced_to_main = 0", conn)
+            if mode == "history":
+                df = pd.read_sql("SELECT * FROM portal_uploads ORDER BY created_at DESC", conn)
+            else:
+                df = pd.read_sql("SELECT * FROM portal_uploads WHERE synced_to_main = 0", conn)
             conn.close()
-            # We use st.text to keep it cleaner, or just json print
             st.text(df.to_json(orient="records"))
         except Exception as e:
-            st.text(f"[]") # Return empty on error
+            st.text(f"[]")
         st.stop()
 
 # --- SETTINGS ---
