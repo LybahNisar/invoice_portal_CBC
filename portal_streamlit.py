@@ -2,10 +2,32 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import os
+import json
 from datetime import datetime
 from pathlib import Path
 from PIL import Image
 import base64
+
+# Shared Database Logic
+DB_PATH = "invoices.db"
+UPLOADS_DIR = Path("invoice_uploads")
+UPLOADS_DIR.mkdir(exist_ok=True)
+
+# --- ADMIN API (FOR DASHBOARD SYNC) ---
+# MUST BE AT TOP to exit before rendering UI
+if st.query_params.get("api") == "sync":
+    secret = st.query_params.get("secret")
+    if secret == os.environ.get("PORTAL_SECRET", "chocoberry2026"):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            # Fetch pending and return as clean JSON
+            df = pd.read_sql("SELECT * FROM portal_uploads WHERE synced_to_main = 0", conn)
+            conn.close()
+            # We use st.text to keep it cleaner, or just json print
+            st.text(df.to_json(orient="records"))
+        except Exception as e:
+            st.text(f"[]") # Return empty on error
+        st.stop()
 
 # --- SETTINGS ---
 st.set_page_config(page_title="Chocoberry Staff Portal", page_icon="🍫", layout="centered")
@@ -83,14 +105,3 @@ with st.container():
             
             st.balloons()
             st.success("✅ Invoice Submitted Successfully! Thank you.")
-            
-# --- ADMIN API (FOR DASHBOARD SYNC) ---
-# Hidden check to allow the main Dashboard to fetch data
-if st.query_params.get("api") == "sync":
-    secret = st.query_params.get("secret")
-    if secret == os.environ.get("PORTAL_SECRET", "chocoberry2026"):
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql("SELECT * FROM portal_uploads WHERE synced_to_main = 0", conn)
-        conn.close()
-        st.write(df.to_json(orient="records"))
-        st.stop()
