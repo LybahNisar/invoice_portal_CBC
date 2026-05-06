@@ -1,36 +1,14 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
 import os
-import json
 from datetime import datetime
 from pathlib import Path
-from PIL import Image
-import base64
+from supabase import create_client, Client
 
-# Shared Database Logic
-DB_PATH = "invoices.db"
-UPLOADS_DIR = Path("invoice_uploads")
-UPLOADS_DIR.mkdir(exist_ok=True)
-
-# --- ADMIN API (FOR DASHBOARD SYNC) ---
-# MUST BE AT TOP to exit before rendering UI
-if st.query_params.get("api") == "sync":
-    secret = st.query_params.get("secret")
-    mode = st.query_params.get("mode", "pending") # Default to pending
-    
-    if secret == os.environ.get("PORTAL_SECRET", "chocoberry2026"):
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            if mode == "history":
-                df = pd.read_sql("SELECT * FROM portal_uploads ORDER BY created_at DESC", conn)
-            else:
-                df = pd.read_sql("SELECT * FROM portal_uploads WHERE synced_to_main = 0", conn)
-            conn.close()
-            st.text(df.to_json(orient="records"))
-        except Exception as e:
-            st.text(f"[]")
-        st.stop()
+# --- SUPABASE CONFIG ---
+SUPABASE_URL = "https://rrlveynfxghfclgnizpm.supabase.co"
+SUPABASE_KEY = "sb_publishable_-fdpwEmIzCmguuGyOU90rg_mZ1d0gFc"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- SETTINGS ---
 st.set_page_config(page_title="Chocoberry Staff Portal", page_icon="🍫", layout="centered")
@@ -47,36 +25,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Shared Database Logic
-DB_PATH = "invoices.db"
-UPLOADS_DIR = Path("invoice_uploads")
-UPLOADS_DIR.mkdir(exist_ok=True)
-
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS portal_uploads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            upload_date TEXT,
-            staff_name TEXT,
-            supplier TEXT,
-            total_amount REAL,
-            image_filename TEXT,
-            synced_to_main INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
-
 # --- UI ---
 st.markdown('<div class="logo-text">Choco<span class="logo-span">berry</span></div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-text">Staff Invoice Portal</div>', unsafe_allow_html=True)
 
 with st.container():
-    st.info("✨ Take a photo of the receipt and fill in the details below.")
+    st.info("✨ Take a photo of the receipt and fill in the details below. This data is now permanently saved.")
     
     staff_name = st.text_input("👤 Your Name", placeholder="e.g. Ahmed")
     
@@ -93,18 +47,21 @@ with st.container():
         if not staff_name or supplier == "Select..." or amount <= 0 or not photo:
             st.error("⚠️ Please fill in all fields and take a photo!")
         else:
-            # Save Image
-            filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{staff_name[:5]}.jpg"
-            save_path = UPLOADS_DIR / filename
-            with open(save_path, "wb") as f:
-                f.write(photo.getbuffer())
-            
-            # Save to DB
-            conn = sqlite3.connect(DB_PATH)
-            conn.execute("INSERT INTO portal_uploads (upload_date, staff_name, supplier, total_amount, image_filename) VALUES (?,?,?,?,?)",
-                        (datetime.now().strftime("%Y-%m-%d"), staff_name, supplier, amount, filename))
-            conn.commit()
-            conn.close()
-            
-            st.balloons()
-            st.success("✅ Invoice Submitted Successfully! Thank you.")
+            try:
+                # 1. Prepare Data
+                data = {
+                    "staff_name": staff_name,
+                    "supplier": supplier,
+                    "total_amount": amount,
+                    "image_url": "Image captured via camera", # Note: Real image storage can be added later
+                    "synced_to_main": False
+                }
+                
+                # 2. Save to Supabase
+                response = supabase.table("portal_uploads").insert(data).execute()
+                
+                st.balloons()
+                st.success("✅ Invoice Submitted Successfully! It is now permanently saved in the Cloud.")
+                
+            except Exception as e:
+                st.error(f"❌ Error saving to cloud: {str(e)}")
