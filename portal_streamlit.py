@@ -65,3 +65,27 @@ with st.container():
                 
             except Exception as e:
                 st.error(f"❌ Error saving to cloud: {str(e)}")
+
+# --- HISTORY & BACKUP (Plan B) ---
+st.markdown("---")
+with st.expander("📂 View Upload History & Download CSV"):
+    try:
+        # Fetch data for preview
+        history_resp = supabase.table("portal_uploads").select("*").order("created_at", desc=True).execute()
+        history_df = pd.DataFrame(history_resp.data)
+        
+        if not history_df.empty:
+            st.dataframe(history_df[["upload_date", "staff_name", "supplier", "total_amount"]], use_container_width=True)
+            
+            # CSV Download Button
+            csv = history_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 DOWNLOAD ALL INVOICES AS CSV",
+                data=csv,
+                file_name=f"chocoberry_invoices_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime='text/csv',
+            )
+        else:
+            st.write("No records found in history yet.")
+    except Exception as e:
+        st.write("Could not load history.")
